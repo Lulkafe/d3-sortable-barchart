@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<style>
+    .axis {
+        font: 10px sans-serif;
+    }
+
+    .axis path,
+    .axis line {
+        fill: none;
+        stroke: #000;
+        shape-rendering: crispEdges;
+    }
+</style>
+<head>
+    <script src="https://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<div id="vis"></div>
+
+<script>
+    var height = 300,
+            width = 500,
+            padding = { top: 20, left: 20, right: 20, bottom: 20},
+            xScale = d3.scale.ordinal(),
+            yScale = d3.scale.linear(),
+            svg = d3.select("#vis").append("svg").attr("width", width).attr("height", height),
+            color = d3.scale.category10(),
+            xAxis = d3.svg.axis(),
+            data = [
+                { category: "A", value: 50 },
+                { category: "B", value: 30 },
+                { category: "C", value: 20 },
+                { category: "D", value: 20 },
+            ],
+            drag = d3.behavior.drag()
+                    .on("dragstart", function(){
+                        var bar = d3.select(this),
+                                mouseX = d3.mouse(this)[0],
+                                barX = +bar.attr("x");
+
+                        /* Keep at which x coordinate the bar is drawn when the dragging starts */
+                        bar.property("startX", barX)
+
+                        /* Since x of the bar starts at the top-left corner of the rect,
+                         Here, calculate how much the x of the current bar is apart from the x of the mouse */
+                        bar.property("xDiff", mouseX - barX);
+
+                        /* Bring the bar to the front */
+                        bar.node().parentNode.appendChild(bar.node());
+
+                    })
+                    .on("drag", function(){
+
+                        var curBar = d3.select(this),
+                                curIdx = data.indexOf(curBar.datum()),
+                                startX = curBar.property("startX"),
+                                mouseX = d3.mouse(this)[0],
+                                newX = mouseX - curBar.property("xDiff"),
+                                xRange = (xScale.range()[1] - xScale.range()[0]) / 2,
+                                backlash = xScale.rangeBand() / 2.5,
+                                nearestBar, nearestIdx, nearestX;
+
+                        if (newX < xScale.range()[0] - backlash
+                                || xScale.range()[data.length - 1] + backlash < newX)
+                            return;
+
+                        curBar.attr("x", newX);
+
+                        /* Get the index of the nearest bar */
+                        if (curIdx == 0)
+                            nearestIdx = 1;
+                        else if (newX < startX || curIdx == data.length - 1)
+                            nearestIdx = curIdx - 1;
+                        else
+                            nearestIdx = curIdx + 1;
+
+                        nearestBar = d3.selectAll(".bar").filter(function(d) { return d == data[nearestIdx]; });
+                        nearestX = +nearestBar.attr("x");
+
+                        /* If the current bar is moved close enough to the nearest bar,
+                         then update the order of the data array. For example, if we are dragging
+                         the first bar and moving to right, the order will be [a, b, c] to [b, a, c] */
+                        if (startX + xRange < newX || newX < startX - xRange) {
+
+                            var tmp = data[curIdx];
+                            data[curIdx] = data[nearestIdx];
+                            data[nearestIdx] = tmp;
+
+                            curBar.property("startX", nearestX);
+
+                            xScale.domain(data.map(function(d){ return d.category; }));
+                            d3.select(".x.axis").transition().duration(200).call(xAxis.scale(xScale));
+                            nearestBar.transition().duration(100).attr("x", xScale(nearestBar.datum().category));
+                        }
+
+                    })
+                    .on("dragend", function(){
+                        var bar = d3.select(this);
+                        bar.transition().duration(300).attr("x", xScale(bar.datum().category));
+                    });
+
+
+    xScale.domain(data.map(function(d){ return d.category; }))
+            .rangeRoundBands([ padding.left, width - padding.right], 0.3);
+    yScale.domain([0, d3.max(data, function(d) { return d.value; })])
+            .range([height - padding.bottom, padding.top]);
+
+    xAxis.scale(xScale).orient("bottom");
+
+    svg.selectAll("rect").data(data).enter()
+            .append("rect").attr("width", xScale.rangeBand())
+            .attr("height", function(d) { return height - padding.bottom - yScale(d.value)})
+            .attr("x", function(d) { return xScale(d.category); })
+            .attr("y", function(d) { return yScale(d.value); })
+            .attr("fill", function(d,i) { return color(i); })
+            .attr("class", "bar")
+            .call(drag);
+
+    svg.append("g")
+            .attr("transform", "translate(" + 0 + "," + (height - padding.bottom) + ")")
+            .attr("class", "x axis")
+            .call(xAxis);
+
+</script>
+</body>
